@@ -333,7 +333,7 @@ export default function PokemonTeamEvaluator() {
                   POKEMON TEAM <span className="text-accent underline decoration-accent/30 underline-offset-8">EVALUATOR</span>
                 </h1>
                 <p className="text-lg text-slate-400 leading-relaxed font-medium">
-                  The precision pokemonteamevaluator tool for competitive trainers. Analyze your coverage, identify fatal flaws, and build a mathematically superior team with pokemonteamevaluator.
+                  Precision analysis for competitive trainers. This pokemonteamevaluator reveals coverage gaps, identifies critical weaknesses, and helps you build mathematically superior teams.
                 </p>
               </div>
               
@@ -461,63 +461,63 @@ export default function PokemonTeamEvaluator() {
           {/* SEO / FAQ Section */}
           <section className="mt-40 pt-20 border-t border-slate-800">
             <div className="max-w-4xl mx-auto">
-              <h2 className="text-4xl font-black tracking-tighter mb-12 italic text-center uppercase">The Pokemonteamevaluator Theory</h2>
-              
+              <h2 className="text-4xl font-black tracking-tighter mb-12 italic text-center uppercase">How Pokemon Team Evaluator Works</h2>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-20">
                 <div className="lab-card p-8 bg-slate-900/30">
-                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">1. Why use Pokemonteamevaluator?</h3>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">1. Why Evaluate Your Team?</h3>
                   <p className="text-slate-400 leading-relaxed text-sm">
-                    The competitive meta in Gen 9 is more complex than ever. With 18 distinct types and hundreds of viable moves, your team coordination is critical. Using **pokemonteamevaluator** allows you to visualize your defensive structural integrity and offensive ceiling before entering the arena. Our **pokemonteamevaluator** engine processes complex type charts to give you a definitive advantage in high-stakes battles.
+                    Gen 9 competitive battles demand precise type coordination. With 18 types and complex matchup charts, team synergy matters more than individual strength. This pokemonteamevaluator visualizes your defensive structure and offensive reach before you enter ranked play. The analysis engine processes type effectiveness data to reveal strategic advantages you might miss manually.
                   </p>
                 </div>
                 <div className="lab-card p-8 bg-slate-900/30">
-                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">2. The Pokemonteamevaluator Score</h3>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">2. Understanding Your Score</h3>
                   <p className="text-slate-400 leading-relaxed text-sm">
-                    Every squad entered into the **pokemonteamevaluator** interface receives a real-time score. This **pokemonteamevaluator** metric isn't just a random number; it's a weighted calculation of coverage gaps, switch-in immunities, and vulnerability overlaps. A high **pokemonteamevaluator** score means your team has low shared weaknesses and high resilience.
+                    Every team receives a real-time strategy score from 0-100. This pokemonteamevaluator metric weighs coverage gaps, immunity count, and shared vulnerability patterns. Higher scores indicate fewer exploitable weaknesses and better type distribution. Use the score as a baseline—then refine based on the detailed breakdown below.
                   </p>
                 </div>
               </div>
 
               <div className="space-y-16 max-w-3xl mx-auto">
                 <div>
-                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">What is the Pokemonteamevaluator exactly?</h3>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">What is Pokemon Team Evaluator?</h3>
                   <p className="text-slate-400 leading-relaxed">
-                    The **pokemonteamevaluator** is a free online tool designed for competitive trainers to analyze their team's strengths, weaknesses, and type coverage. Whether you are building a team for VGC battles, Smogon-tier matches, or your main story playthrough, our **pokemonteamevaluator** provides instant mathematical insights to ensure your strategy is bulletproof. Use **pokemonteamevaluator** to identify shared weaknesses, optimize offensive coverage, and calculate your team's defensive balance score.
+                    A free online tool for competitive trainers to analyze team strengths, weaknesses, and type coverage. Whether building for VGC doubles, Smogon singles, or casual battles, this pokemonteamevaluator provides instant mathematical insights into your strategy. Identify shared weaknesses, optimize offensive coverage, and calculate defensive balance—all in one interface.
                   </p>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">How to Optimize Your Roster with Pokemonteamevaluator</h3>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">How to Build Better Teams</h3>
                   <p className="text-slate-400 leading-relaxed mb-6">
-                    Success in high-level battles requires the kind of precision that only **pokemonteamevaluator** can provide. The **pokemonteamevaluator** helps you achieve this by highlighting critical flaws in your coverage. Using the **pokemonteamevaluator** dashboard is intentionally simple for pro-level results:
+                    High-level competitive play demands precision analysis. This pokemonteamevaluator highlights critical coverage flaws and suggests improvements. The workflow is simple but powerful:
                   </p>
                   <ol className="list-none space-y-6 text-slate-400 font-medium">
                     <li className="flex gap-4">
                       <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">1</span>
                       <div>
                         <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Search and Add</strong>
-                        Find your core members using our **pokemonteamevaluator** search engine. Add them to your battle board instantly.
+                        Find Pokemon by name or type using the search bar. Add up to six members to your roster instantly.
                       </div>
                     </li>
                     <li className="flex gap-4">
                       <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">2</span>
                       <div>
-                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Evaluate Strategy</strong>
-                        Review the **pokemonteamevaluator** radar chart to see your team's overall balance across five key strategic dimensions.
+                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Review Analysis</strong>
+                        Check the radar chart showing balance across coverage, defense, immunities, and synergy. The pokemonteamevaluator score updates in real-time.
                       </div>
                     </li>
                     <li className="flex gap-4">
                       <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">3</span>
                       <div>
-                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Iron Out Vulnerabilities</strong>
-                        The **pokemonteamevaluator** matrix results will show you exactly which types can sweep your entire team. Use this data to swap members until your **pokemonteamevaluator** score improves.
+                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Fix Weaknesses</strong>
+                        The defensive matrix shows which types threaten your team. Swap members strategically until vulnerabilities are covered and your score improves.
                       </div>
                     </li>
                   </ol>
                 </div>
-                
+
                 <div className="pt-10 border-t border-slate-800/50">
                   <p className="text-sm text-slate-500 leading-relaxed italic text-center">
-                    Trainers worldwide rely on **pokemonteamevaluator** data to refine their competitive strategies. Don't leave your victory to chance—verify your build with **pokemonteamevaluator** today. Our mission at **pokemonteamevaluator** is to provide the most accurate Gen 9 analysis available for free.
+                    Competitive trainers worldwide use pokemonteamevaluator analysis to refine their strategies. Don't leave victory to chance—verify your build before ranked battles. Our mission: provide the most accurate Gen 9 type effectiveness analysis, completely free.
                   </p>
                 </div>
               </div>
