@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pokémon Team Evaluator - Analyze Team Strengths & Weaknesses Free",
+  title: "Pokemon Team Evaluator - Free Gen 9 Team Analyzer & Builder",
   description:
-    "Free online Pokémon team analyzer. Check type coverage, find shared weaknesses, and get a team score. Supports all 18 types. Build the perfect competitive team.",
+    "Pokemon Team Evaluator is the ultimate pokemonteamevaluator tool for Gen 9 trainers. Analyze your pokemon team for free with pokemonteamevaluator and find weaknesses instantly.",
   keywords:
-    "pokemon team evaluator, pokemon team analyzer, pokemon type coverage, pokemon team builder, pokemon weakness checker, competitive pokemon, pokemon team rating, pokemon type chart",
+    "pokemonteamevaluator, pokemon team evaluator, pokemon team analyzer, pokemon team builder, pokemon weakness checker, competitive pokemon, pokemon type chart",
   openGraph: {
     title: "Pokémon Team Evaluator - Analyze Team Strengths & Weaknesses Free",
     description:
@@ -31,6 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Russo+One&display=swap" rel="stylesheet" />
         <script async src="https://www.googletagmanager.com/gtag/js?id=G-2L9LTYKF0X" />
         <script dangerouslySetInnerHTML={{ __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-2L9LTYKF0X');` }} />
         <script
@@ -49,35 +52,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body className="bg-gray-950 text-gray-100 min-h-screen antialiased">
-        <nav className="border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-            <a href="/" className="flex items-center gap-2">
-              <span className="text-2xl">🔥</span>
-              <span className="font-bold text-lg text-red-500">Pokémon Team Evaluator</span>
+      <body className="bg-slate-950 text-slate-100 min-h-screen antialiased font-medium selection:bg-accent/30">
+        <nav className="border-b border-slate-800 bg-slate-950/50 backdrop-blur-md sticky top-0 z-50">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <a href="/" className="flex items-center gap-3 group">
+              <span className="text-2xl group-hover:scale-125 transition-transform duration-300">🔥</span>
+              <span className="font-black text-xl tracking-tighter text-slate-100 uppercase italic">
+                POKEMON TEAM <span className="text-accent">EVALUATOR</span>
+              </span>
             </a>
-            <div className="flex gap-4 text-sm text-gray-400">
-              <a href="/" className="hover:text-red-500 transition">Home</a>
-              <a href="/about" className="hover:text-red-500 transition">About</a>
+            <div className="flex gap-6 text-xs font-black uppercase tracking-widest text-slate-400">
+              <a href="/" className="hover:text-accent transition-colors">Home</a>
+              <a href="/about" className="hover:text-accent transition-colors">About</a>
             </div>
           </div>
         </nav>
         <main>{children}</main>
-        <footer className="border-t border-gray-800 mt-16 py-8 text-center text-sm text-gray-500">
-          <div className="max-w-6xl mx-auto px-4">
-            <div className="mb-6 p-4 border border-dashed border-gray-700 rounded text-gray-600 text-xs">
-              Advertisement Space
-            </div>
-            <p>© {new Date().getFullYear()} Pokémon Team Evaluator. All rights reserved.</p>
-            <div className="flex justify-center gap-4 mt-2">
-              <a href="/privacy" className="hover:text-red-500 transition">Privacy</a>
-              <a href="/terms" className="hover:text-red-500 transition">Terms</a>
-            </div>
-            <p className="mt-2 text-gray-600 text-xs">
-              Pokémon is a trademark of Nintendo/Game Freak. This is a fan-made tool.
-            </p>
-          </div>
-        </footer>
       </body>
     </html>
   );

@@ -78,6 +78,9 @@ export interface Pokemon {
   name: string;
   types: PokemonType[];
   sprite: string;
+  id: number;
+  generation: number;
+  spriteUrl?: string;
 }
 
 export interface TeamAnalysis {
@@ -94,6 +97,28 @@ export function getDefensiveMultiplier(atkType: PokemonType, defTypes: PokemonTy
   return defTypes.reduce((mult, dt) => mult * (E[atkType]?.[dt] ?? 1), 1);
 }
 
+// Pre-computed SE targets for performance optimization
+const SE_TARGETS: Record<PokemonType, PokemonType[]> = {
+  Normal: [],
+  Fire: ["Grass", "Ice", "Bug", "Steel"],
+  Water: ["Fire", "Ground", "Rock"],
+  Electric: ["Water", "Flying"],
+  Grass: ["Water", "Ground", "Rock"],
+  Ice: ["Grass", "Ground", "Flying", "Dragon"],
+  Fighting: ["Normal", "Ice", "Rock", "Dark", "Steel"],
+  Poison: ["Grass", "Fairy"],
+  Ground: ["Fire", "Electric", "Poison", "Rock", "Steel"],
+  Flying: ["Grass", "Fighting", "Bug"],
+  Psychic: ["Fighting", "Poison"],
+  Bug: ["Grass", "Psychic", "Dark"],
+  Rock: ["Fire", "Ice", "Flying", "Bug"],
+  Ghost: ["Psychic", "Ghost"],
+  Dragon: ["Dragon"],
+  Dark: ["Psychic", "Ghost"],
+  Steel: ["Ice", "Rock", "Fairy"],
+  Fairy: ["Fighting", "Dragon", "Dark"],
+};
+
 export function analyzeTeam(team: Pokemon[]): TeamAnalysis {
   const offensiveCoverage: Record<string, boolean> = {};
   const defensiveWeaknesses: Record<string, number> = {};
@@ -105,14 +130,12 @@ export function analyzeTeam(team: Pokemon[]): TeamAnalysis {
     defensiveResistances[t] = 0;
   });
 
-  // Offensive: can any team member's STAB hit this type SE?
+  // Offensive: can any team member's STAB hit this type SE? (optimized with lookup table)
   for (const poke of team) {
     for (const atkType of poke.types) {
-      for (const defType of TYPES) {
-        if (E[atkType]?.[defType] === 2) {
-          offensiveCoverage[defType] = true;
-        }
-      }
+      SE_TARGETS[atkType].forEach(defType => {
+        offensiveCoverage[defType] = true;
+      });
     }
   }
 
@@ -131,11 +154,12 @@ export function analyzeTeam(team: Pokemon[]): TeamAnalysis {
     team.some(p => getDefensiveMultiplier(t, p.types) === 0)
   );
 
-  // Score calculation
-  const coverageScore = ((TYPES.length - uncoveredTypes.length) / TYPES.length) * 40;
-  const weaknessScore = Math.max(0, 30 - sharedWeaknesses.length * 10);
-  const immunityScore = Math.min(20, immunities.length * 5);
-  const balanceScore = team.length >= 6 ? 10 : (team.length / 6) * 10;
+  // Improved score calculation with better curves
+  const coverageRatio = (TYPES.length - uncoveredTypes.length) / TYPES.length;
+  const coverageScore = Math.pow(coverageRatio, 1.5) * 35;
+  const weaknessScore = Math.max(0, 35 - sharedWeaknesses.length * 8 - (sharedWeaknesses.length > 2 ? 10 : 0));
+  const immunityScore = Math.min(15, immunities.length * 4);
+  const balanceScore = team.length >= 6 ? 15 : 0;
   const score = Math.round(coverageScore + weaknessScore + immunityScore + balanceScore);
 
   return {
@@ -151,46 +175,46 @@ export function analyzeTeam(team: Pokemon[]): TeamAnalysis {
 
 // Popular Pokemon database (subset for MVP)
 export const POKEMON_DB: Pokemon[] = [
-  { name: "Charizard", types: ["Fire", "Flying"], sprite: "🔥" },
-  { name: "Blastoise", types: ["Water"], sprite: "💧" },
-  { name: "Venusaur", types: ["Grass", "Poison"], sprite: "🌿" },
-  { name: "Pikachu", types: ["Electric"], sprite: "⚡" },
-  { name: "Gengar", types: ["Ghost", "Poison"], sprite: "👻" },
-  { name: "Dragonite", types: ["Dragon", "Flying"], sprite: "🐉" },
-  { name: "Mewtwo", types: ["Psychic"], sprite: "🧠" },
-  { name: "Tyranitar", types: ["Rock", "Dark"], sprite: "🪨" },
-  { name: "Garchomp", types: ["Dragon", "Ground"], sprite: "🦈" },
-  { name: "Lucario", types: ["Fighting", "Steel"], sprite: "⚔️" },
-  { name: "Togekiss", types: ["Fairy", "Flying"], sprite: "🧚" },
-  { name: "Scizor", types: ["Bug", "Steel"], sprite: "✂️" },
-  { name: "Gyarados", types: ["Water", "Flying"], sprite: "🌊" },
-  { name: "Snorlax", types: ["Normal"], sprite: "😴" },
-  { name: "Alakazam", types: ["Psychic"], sprite: "🔮" },
-  { name: "Machamp", types: ["Fighting"], sprite: "💪" },
-  { name: "Steelix", types: ["Steel", "Ground"], sprite: "🔩" },
-  { name: "Espeon", types: ["Psychic"], sprite: "☀️" },
-  { name: "Umbreon", types: ["Dark"], sprite: "🌙" },
-  { name: "Salamence", types: ["Dragon", "Flying"], sprite: "🐲" },
-  { name: "Metagross", types: ["Steel", "Psychic"], sprite: "🤖" },
-  { name: "Infernape", types: ["Fire", "Fighting"], sprite: "🐵" },
-  { name: "Luxray", types: ["Electric"], sprite: "🦁" },
-  { name: "Roserade", types: ["Grass", "Poison"], sprite: "🌹" },
-  { name: "Weavile", types: ["Dark", "Ice"], sprite: "❄️" },
-  { name: "Gliscor", types: ["Ground", "Flying"], sprite: "🦂" },
-  { name: "Haxorus", types: ["Dragon"], sprite: "🪓" },
-  { name: "Volcarona", types: ["Bug", "Fire"], sprite: "🦋" },
-  { name: "Hydreigon", types: ["Dark", "Dragon"], sprite: "🐍" },
-  { name: "Aegislash", types: ["Steel", "Ghost"], sprite: "🛡️" },
-  { name: "Greninja", types: ["Water", "Dark"], sprite: "🥷" },
-  { name: "Talonflame", types: ["Fire", "Flying"], sprite: "🦅" },
-  { name: "Sylveon", types: ["Fairy"], sprite: "🎀" },
-  { name: "Mimikyu", types: ["Ghost", "Fairy"], sprite: "🎭" },
-  { name: "Dragapult", types: ["Dragon", "Ghost"], sprite: "🚀" },
-  { name: "Corviknight", types: ["Flying", "Steel"], sprite: "🐦‍⬛" },
-  { name: "Excadrill", types: ["Ground", "Steel"], sprite: "⛏️" },
-  { name: "Ferrothorn", types: ["Grass", "Steel"], sprite: "🌵" },
-  { name: "Rotom-Wash", types: ["Electric", "Water"], sprite: "🫧" },
-  { name: "Magnezone", types: ["Electric", "Steel"], sprite: "🧲" },
+  { name: "Charizard", types: ["Fire", "Flying"], sprite: "🔥", id: 6, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png" },
+  { name: "Blastoise", types: ["Water"], sprite: "💧", id: 9, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/9.png" },
+  { name: "Venusaur", types: ["Grass", "Poison"], sprite: "🌿", id: 3, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/3.png" },
+  { name: "Pikachu", types: ["Electric"], sprite: "⚡", id: 25, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png" },
+  { name: "Gengar", types: ["Ghost", "Poison"], sprite: "👻", id: 94, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/94.png" },
+  { name: "Dragonite", types: ["Dragon", "Flying"], sprite: "🐉", id: 149, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/149.png" },
+  { name: "Mewtwo", types: ["Psychic"], sprite: "🧠", id: 150, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/150.png" },
+  { name: "Tyranitar", types: ["Rock", "Dark"], sprite: "🪨", id: 248, generation: 2, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/248.png" },
+  { name: "Garchomp", types: ["Dragon", "Ground"], sprite: "🦈", id: 445, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/445.png" },
+  { name: "Lucario", types: ["Fighting", "Steel"], sprite: "⚔️", id: 448, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/448.png" },
+  { name: "Togekiss", types: ["Fairy", "Flying"], sprite: "🧚", id: 468, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/468.png" },
+  { name: "Scizor", types: ["Bug", "Steel"], sprite: "✂️", id: 212, generation: 2, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/212.png" },
+  { name: "Gyarados", types: ["Water", "Flying"], sprite: "🌊", id: 130, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/130.png" },
+  { name: "Snorlax", types: ["Normal"], sprite: "😴", id: 143, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/143.png" },
+  { name: "Alakazam", types: ["Psychic"], sprite: "🔮", id: 65, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/65.png" },
+  { name: "Machamp", types: ["Fighting"], sprite: "💪", id: 68, generation: 1, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/68.png" },
+  { name: "Steelix", types: ["Steel", "Ground"], sprite: "🔩", id: 208, generation: 2, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/208.png" },
+  { name: "Espeon", types: ["Psychic"], sprite: "☀️", id: 196, generation: 2, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/196.png" },
+  { name: "Umbreon", types: ["Dark"], sprite: "🌙", id: 197, generation: 2, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/197.png" },
+  { name: "Salamence", types: ["Dragon", "Flying"], sprite: "🐲", id: 373, generation: 3, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/373.png" },
+  { name: "Metagross", types: ["Steel", "Psychic"], sprite: "🤖", id: 376, generation: 3, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/376.png" },
+  { name: "Infernape", types: ["Fire", "Fighting"], sprite: "🐵", id: 392, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/392.png" },
+  { name: "Luxray", types: ["Electric"], sprite: "🦁", id: 405, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/405.png" },
+  { name: "Roserade", types: ["Grass", "Poison"], sprite: "🌹", id: 407, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/407.png" },
+  { name: "Weavile", types: ["Dark", "Ice"], sprite: "❄️", id: 461, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/461.png" },
+  { name: "Gliscor", types: ["Ground", "Flying"], sprite: "🦂", id: 472, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/472.png" },
+  { name: "Haxorus", types: ["Dragon"], sprite: "🪓", id: 612, generation: 5, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/612.png" },
+  { name: "Volcarona", types: ["Bug", "Fire"], sprite: "🦋", id: 637, generation: 5, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/637.png" },
+  { name: "Hydreigon", types: ["Dark", "Dragon"], sprite: "🐍", id: 635, generation: 5, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/635.png" },
+  { name: "Aegislash", types: ["Steel", "Ghost"], sprite: "🛡️", id: 681, generation: 6, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/681.png" },
+  { name: "Greninja", types: ["Water", "Dark"], sprite: "🥷", id: 658, generation: 6, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/658.png" },
+  { name: "Talonflame", types: ["Fire", "Flying"], sprite: "🦅", id: 663, generation: 6, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/663.png" },
+  { name: "Sylveon", types: ["Fairy"], sprite: "🎀", id: 700, generation: 6, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/700.png" },
+  { name: "Mimikyu", types: ["Ghost", "Fairy"], sprite: "🎭", id: 778, generation: 7, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/778.png" },
+  { name: "Dragapult", types: ["Dragon", "Ghost"], sprite: "🚀", id: 887, generation: 8, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/887.png" },
+  { name: "Corviknight", types: ["Flying", "Steel"], sprite: "🐦‍⬛", id: 823, generation: 8, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/823.png" },
+  { name: "Excadrill", types: ["Ground", "Steel"], sprite: "⛏️", id: 530, generation: 5, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/530.png" },
+  { name: "Ferrothorn", types: ["Grass", "Steel"], sprite: "🌵", id: 598, generation: 5, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/598.png" },
+  { name: "Rotom-Wash", types: ["Electric", "Water"], sprite: "🫧", id: 479, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/479.png" },
+  { name: "Magnezone", types: ["Electric", "Steel"], sprite: "🧲", id: 462, generation: 4, spriteUrl: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/462.png" },
 ];
 
 export const TYPE_COLORS: Record<PokemonType, string> = {

@@ -1,6 +1,43 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition, useEffect } from "react";
+import Link from "next/link";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { createPortal } from 'react-dom';
+import {
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RechartsTooltip,
+} from 'recharts';
+
 import {
   TYPES,
   POKEMON_DB,
@@ -10,31 +47,26 @@ import {
   type PokemonType,
   type TeamAnalysis,
 } from "@/lib/pokemon";
+import PokemonImage from "@/components/PokemonImage";
+import DraggablePokemon from "@/components/DraggablePokemon";
+import SortablePokemon from "@/components/SortablePokemon";
 
-function TypeBadge({ type }: { type: PokemonType }) {
-  return (
-    <span className={`${TYPE_COLORS[type]} text-white text-xs px-2 py-0.5 rounded-full font-medium`}>
+function TypeBadge({ type, linkable = false }: { type: PokemonType; linkable?: boolean }) {
+  const badge = (
+    <span className={`${TYPE_COLORS[type]} type-chip`}>
       {type}
     </span>
   );
-}
 
-function PokemonCard({ pokemon, onRemove }: { pokemon: Pokemon; onRemove: () => void }) {
-  return (
-    <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 flex flex-col items-center gap-2 relative group">
-      <button
-        onClick={onRemove}
-        className="absolute top-2 right-2 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"
-      >
-        ✕
-      </button>
-      <span className="text-4xl">{pokemon.sprite}</span>
-      <span className="font-semibold text-sm">{pokemon.name}</span>
-      <div className="flex gap-1">
-        {pokemon.types.map(t => <TypeBadge key={t} type={t} />)}
-      </div>
-    </div>
-  );
+  if (linkable) {
+    return (
+      <Link href={`/types/${type.toLowerCase()}`} className="hover:scale-110 transition-transform inline-block">
+        {badge}
+      </Link>
+    );
+  }
+
+  return badge;
 }
 
 function PokemonSearch({ onAdd, team }: { onAdd: (p: Pokemon) => void; team: Pokemon[] }) {
@@ -55,31 +87,17 @@ function PokemonSearch({ onAdd, team }: { onAdd: (p: Pokemon) => void; team: Pok
         type="text"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search Pokémon by name or type..."
-        className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-200 focus:outline-none focus:border-red-500 mb-3"
+        placeholder="Search for a Pokemon (e.g. Charizard, Water)..."
+        className="w-full bg-slate-950 border border-panel-border rounded-lg px-4 py-3 text-slate-200 focus:outline-none focus:border-accent mb-4 transition-colors"
       />
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-64 overflow-y-auto">
-        {filtered.map(p => (
-          <button
-            key={p.name}
-            onClick={() => onAdd(p)}
-            disabled={teamNames.has(p.name) || team.length >= 6}
-            className={`flex items-center gap-2 p-2 rounded-lg border text-left text-sm transition ${
-              teamNames.has(p.name)
-                ? "border-gray-800 bg-gray-900/50 text-gray-600 cursor-not-allowed"
-                : "border-gray-700 hover:border-red-500 hover:bg-gray-800 cursor-pointer"
-            }`}
-          >
-            <span className="text-xl">{p.sprite}</span>
-            <div>
-              <div className="font-medium text-xs">{p.name}</div>
-              <div className="flex gap-1 mt-0.5">
-                {p.types.map(t => (
-                  <span key={t} className={`${TYPE_COLORS[t]} text-[10px] px-1 rounded text-white`}>{t}</span>
-                ))}
-              </div>
-            </div>
-          </button>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-72 overflow-y-auto pr-2 custom-scrollbar">
+          {filtered.map(p => (
+          <DraggablePokemon 
+            key={p.name} 
+            pokemon={p} 
+            disabled={teamNames.has(p.name) || team.length >= 6} 
+            onAdd={onAdd}
+          />
         ))}
       </div>
     </div>
@@ -87,72 +105,145 @@ function PokemonSearch({ onAdd, team }: { onAdd: (p: Pokemon) => void; team: Pok
 }
 
 function AnalysisPanel({ analysis, team }: { analysis: TeamAnalysis; team: Pokemon[] }) {
+  const [toast, setToast] = useState("");
   const shareText = `🏆 My Pokémon Team Score: ${analysis.score}/100\n\n${team.map(p => `${p.sprite} ${p.name} (${p.types.join("/")})`).join("\n")}\n\n⚠️ Weaknesses: ${analysis.sharedWeaknesses.join(", ") || "None!"}\n✅ Coverage gaps: ${analysis.uncoveredTypes.join(", ") || "Full coverage!"}\n\nBuild your team: https://pokemonteamevaluator.com`;
 
+  const radarData = [
+    { subject: 'Coverage', A: analysis.score > 0 ? Math.min(100, (1 - analysis.uncoveredTypes.length / 18) * 100) : 0 },
+    { subject: 'Defense', A: analysis.score > 0 ? Math.min(100, (1 - analysis.sharedWeaknesses.length / 18) * 100) : 0 },
+    { subject: 'Immunities', A: Math.min(100, (analysis.immunities.length / 6) * 100) },
+    { subject: 'Balance', A: analysis.score },
+    { subject: 'Synergy', A: analysis.score > 50 ? analysis.score : 50 },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Score */}
-      <div className="text-center py-6 bg-gradient-to-b from-red-950/40 to-transparent rounded-xl border border-red-900/50">
-        <p className="text-red-400 text-sm mb-2">Team Rating</p>
-        <p className={`text-6xl font-bold ${
-          analysis.score >= 75 ? "text-green-400" :
-          analysis.score >= 50 ? "text-yellow-400" :
-          "text-red-400"
-        }`}>
-          {analysis.score}<span className="text-2xl text-gray-500">/100</span>
-        </p>
-        <button
-          onClick={() => navigator.clipboard.writeText(shareText)}
-          className="mt-4 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-sm rounded-lg transition"
-        >
-          📋 Share Team
-        </button>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* Score & Radar Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 text-center py-10 lab-card bg-linear-to-b from-accent/5 to-transparent border-accent/20 flex flex-col justify-center">
+          <p className="text-accent text-xs font-black uppercase tracking-widest mb-2">Analysis Complete</p>
+          <p className="text-sm text-slate-400 mb-1">Your Team Strategy Score</p>
+          <div className={`text-7xl font-black ${
+            analysis.score >= 75 ? "text-emerald-400" :
+            analysis.score >= 50 ? "text-amber-400" :
+            "text-rose-500"
+          }`}>
+            {analysis.score}<span className="text-2xl text-slate-600 font-medium">/100</span>
+          </div>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(shareText);
+              setToast("Team analysis copied!");
+              setTimeout(() => setToast(""), 3000);
+            }}
+            className="mt-6 lab-button mx-auto"
+          >
+            Share Report
+          </button>
+        </div>
+
+        <div className="lg:col-span-2 lab-card p-6 flex flex-col items-center justify-center min-h-[300px]">
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4">Team Performance Radar</h3>
+          <div className="w-full h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                <PolarGrid stroke="#334155" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 'bold' }} />
+                <Radar
+                  name="Team"
+                  dataKey="A"
+                  stroke="#38bdf8"
+                  fill="#38bdf8"
+                  fillOpacity={0.3}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
-      {/* Warnings */}
-      {analysis.sharedWeaknesses.length > 0 && (
-        <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4">
-          <h3 className="font-bold text-red-400 mb-2">⚠️ Shared Weaknesses</h3>
-          <p className="text-sm text-gray-400 mb-2">3+ team members are weak to:</p>
-          <div className="flex flex-wrap gap-2">
-            {analysis.sharedWeaknesses.map(t => <TypeBadge key={t} type={t} />)}
-          </div>
+      {toast && (
+        <div className="fixed bottom-8 right-8 bg-accent text-slate-900 px-6 py-3 rounded-lg font-bold shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
+          {toast}
         </div>
       )}
 
-      {analysis.uncoveredTypes.length > 0 && (
-        <div className="bg-amber-950/30 border border-amber-900/50 rounded-xl p-4">
-          <h3 className="font-bold text-amber-400 mb-2">🔓 Uncovered Types</h3>
-          <p className="text-sm text-gray-400 mb-2">No team member hits super effective against:</p>
-          <div className="flex flex-wrap gap-2">
-            {analysis.uncoveredTypes.map(t => <TypeBadge key={t} type={t} />)}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Warnings */}
+        {analysis.sharedWeaknesses.length > 0 && (
+          <div className="lab-card p-6 border-rose-500/20 bg-rose-500/5">
+            <h3 className="font-black text-rose-400 mb-2 uppercase tracking-tight flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              Critical Vulnerabilities
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">Multiple members are weak to these types:</p>
+            <div className="flex flex-wrap gap-2">
+              {analysis.sharedWeaknesses.map(t => <TypeBadge key={t} type={t} linkable />)}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {analysis.uncoveredTypes.length > 0 && (
+          <div className="lab-card p-6 border-amber-500/20 bg-amber-500/5">
+            <h3 className="font-black text-amber-400 mb-2 uppercase tracking-tight flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              Coverage Gaps
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">No team member deals super-effective damage to:</p>
+            <div className="flex flex-wrap gap-2">
+              {analysis.uncoveredTypes.map(t => <TypeBadge key={t} type={t} linkable />)}
+            </div>
+          </div>
+        )}
+      </div>
 
       {analysis.immunities.length > 0 && (
-        <div className="bg-green-950/30 border border-green-900/50 rounded-xl p-4">
-          <h3 className="font-bold text-green-400 mb-2">🛡️ Immunities</h3>
+        <div className="lab-card p-6 border-emerald-500/20 bg-emerald-500/5">
+          <h3 className="font-black text-emerald-400 mb-4 uppercase tracking-tight flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            Switch-in Immunities
+          </h3>
           <div className="flex flex-wrap gap-2">
-            {analysis.immunities.map(t => <TypeBadge key={t} type={t} />)}
+            {analysis.immunities.map(t => <TypeBadge key={t} type={t} linkable />)}
           </div>
         </div>
       )}
 
-      {/* Type Coverage Grid */}
-      <div className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-        <h3 className="font-bold text-red-400 mb-3">📊 Defensive Matchup Chart</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {/* Type Coverage Matrix Heatmap */}
+      <div className="lab-card p-6 overflow-hidden">
+        <h3 className="font-black text-accent mb-6 uppercase tracking-widest text-sm text-center">Defensive Structural Analysis</h3>
+        <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-9 gap-2">
           {TYPES.map(t => {
             const weak = analysis.defensiveWeaknesses[t];
             const resist = analysis.defensiveResistances[t];
+            const diff = resist - weak;
+            
+            let bgColor = "bg-slate-900/50";
+            let borderColor = "border-slate-800";
+            if (diff < 0) {
+              bgColor = diff <= -1 ? (diff <= -2 ? "bg-rose-500/30" : "bg-rose-500/10") : "bg-slate-900/50";
+              borderColor = diff <= -1 ? (diff <= -2 ? "border-rose-500/50" : "border-rose-500/30") : "border-slate-800";
+            } else if (diff > 0) {
+              bgColor = diff >= 1 ? (diff >= 2 ? "bg-emerald-500/30" : "bg-emerald-500/10") : "bg-slate-900/50";
+              borderColor = diff >= 1 ? (diff >= 2 ? "border-emerald-500/50" : "border-emerald-500/30") : "border-slate-800";
+            }
+
             return (
-              <div key={t} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-2">
+              <div 
+                key={t} 
+                className={`flex flex-col items-center gap-2 rounded-lg p-3 border transition-all hover:scale-105 ${bgColor} ${borderColor}`}
+              >
                 <TypeBadge type={t} />
-                <div className="flex gap-2 text-xs">
-                  {weak > 0 && <span className="text-red-400">⬇{weak}</span>}
-                  {resist > 0 && <span className="text-green-400">⬆{resist}</span>}
-                  {weak === 0 && resist === 0 && <span className="text-gray-600">—</span>}
+                <div className="flex flex-col items-center">
+                  <span className={`text-lg font-black ${
+                    diff < 0 ? "text-rose-400" : diff > 0 ? "text-emerald-400" : "text-slate-500"
+                  }`}>
+                    {diff > 0 ? `+${diff}` : diff}
+                  </span>
+                  <div className="flex gap-2 text-[10px] font-bold opacity-60">
+                    <span className="text-rose-500">W:{weak}</span>
+                    <span className="text-emerald-400">R:{resist}</span>
+                  </div>
                 </div>
               </div>
             );
@@ -165,7 +256,21 @@ function AnalysisPanel({ analysis, team }: { analysis: TeamAnalysis; team: Pokem
 
 export default function PokemonTeamEvaluator() {
   const [team, setTeam] = useState<Pokemon[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activePokemon, setActivePokemon] = useState<Pokemon | null>(null);
+  const [isPending, startTransition] = useTransition();
   const analysis = useMemo(() => team.length > 0 ? analyzeTeam(team) : null, [team]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const addPokemon = (p: Pokemon) => {
     if (team.length < 6 && !team.find(t => t.name === p.name)) {
@@ -177,121 +282,290 @@ export default function PokemonTeamEvaluator() {
     setTeam(team.filter(p => p.name !== name));
   };
 
-  return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Hero */}
-      <div className="text-center mb-10">
-        <p className="text-red-600 text-sm font-semibold tracking-wider mb-2">🔥 FREE ONLINE TOOL</p>
-        <h1 className="text-4xl sm:text-5xl font-extrabold mb-4">
-          <span className="text-red-500">Pokémon Team</span> Evaluator
-        </h1>
-        <p className="text-gray-400 max-w-2xl mx-auto">
-          Build your Pokémon team and instantly analyze type coverage, weaknesses, and resistances.
-          Get a team score and suggestions to build the perfect competitive team.
-        </p>
-        <div className="flex justify-center gap-4 mt-4 text-xs text-gray-500">
-          <span>✅ All 18 types</span>
-          <span>✅ 100% free</span>
-          <span>✅ Instant analysis</span>
-        </div>
-      </div>
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    setActiveId(active.id as string);
+    setActivePokemon(active.data.current?.pokemon);
+  };
 
-      {/* Team Display */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold mb-3">Your Team ({team.length}/6)</h2>
-        {team.length > 0 ? (
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-            {team.map(p => (
-              <PokemonCard key={p.name} pokemon={p} onRemove={() => removePokemon(p.name)} />
-            ))}
-            {Array.from({ length: 6 - team.length }).map((_, i) => (
-              <div key={`empty-${i}`} className="border-2 border-dashed border-gray-800 rounded-xl p-4 flex items-center justify-center text-gray-700">
-                <span className="text-2xl">+</span>
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    setActivePokemon(null);
+
+    if (!over) return;
+
+    // Handle dropping search item onto team area
+    if (active.data.current?.type === 'search-item') {
+      addPokemon(active.data.current.pokemon);
+      return;
+    }
+
+    // Handle reordering within team
+    if (active.id !== over.id && active.data.current?.type === 'team-item') {
+      const oldIndex = team.findIndex((p) => `team-${p.name}` === active.id);
+      const newIndex = team.findIndex((p) => `team-${p.name}` === over.id);
+      
+      if (oldIndex !== -1 && newIndex !== -1) {
+        setTeam((items) => arrayMove(items, oldIndex, newIndex));
+      }
+    }
+  };
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="min-h-screen">
+        <div className="max-w-6xl mx-auto px-4 py-12 md:py-20">
+          {/* Hero & Tool Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start mb-24">
+            <div className="lg:col-span-5 space-y-6">
+              <div>
+                <p className="text-accent text-xs font-black tracking-widest uppercase mb-4 flex items-center gap-2">
+                  <span className="w-8 h-px bg-accent" />
+                  Pokemon Team Evaluator - VGC & Singles
+                </p>
+                <h1 className="text-5xl md:text-6xl font-black leading-none tracking-tighter mb-6">
+                  POKEMON TEAM <span className="text-accent underline decoration-accent/30 underline-offset-8">EVALUATOR</span>
+                </h1>
+                <p className="text-lg text-slate-400 leading-relaxed font-medium">
+                  The precision pokemonteamevaluator tool for competitive trainers. Analyze your coverage, identify fatal flaws, and build a mathematically superior team with pokemonteamevaluator.
+                </p>
               </div>
-            ))}
+              
+              <div className="space-y-4 pt-4">
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <span className="text-accent text-xl font-bold">/01</span> 
+                  <span>Full Gen 9 type effectiveness engine.</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <span className="text-accent text-xl font-bold">/02</span>
+                  <span>Offensive & Defensive matrix calculations.</span>
+                </div>
+                <div className="flex items-center gap-3 text-sm text-slate-500">
+                  <span className="text-accent text-xl font-bold">/03</span>
+                  <span>Shared weakness & resistance detection.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-7 space-y-6">
+              <div className="lab-card p-6 bg-slate-900/40 border-accent/10">
+                <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 flex justify-between">
+                  Current Roster <span>{team.length} / 06</span>
+                </h2>
+                
+                <SortableContext 
+                  items={team.map(p => `team-${p.name}`)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-8 min-h-[160px]">
+                    {team.map(p => (
+                      <SortablePokemon 
+                        key={p.name} 
+                        pokemon={p} 
+                        onRemove={() => removePokemon(p.name)} 
+                      />
+                    ))}
+                    {Array.from({ length: 6 - team.length }).map((_, i) => (
+                      <div key={`empty-${i}`} className="lab-card bg-slate-950/50 border-dashed border-slate-800 p-4 flex items-center justify-center text-slate-800/30 hover:border-slate-700 transition-colors">
+                        <span className="text-xl font-black">+</span>
+                      </div>
+                    ))}
+                  </div>
+                </SortableContext>
+
+                <div className="space-y-4">
+                  <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Add Team Member</h2>
+                  <PokemonSearch onAdd={addPokemon} team={team} />
+                </div>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="border-2 border-dashed border-gray-800 rounded-xl p-8 text-center text-gray-600">
-            Add Pokémon below to start evaluating your team
+
+{analysis && (
+            <div className="mb-24 scroll-mt-10" id="analysis">
+              <AnalysisPanel analysis={analysis} team={team} />
+            </div>
+          )}
+
+          {/* Content Discovery Sections */}
+          <div className="space-y-24">
+            <section>
+              <div className="flex items-end justify-between mb-8 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight mb-2">Popular Type Guides</h2>
+                  <p className="text-slate-500 font-medium text-sm">Deep-dive into individual type strategies and matchups.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Link href="/types/fire" className="lab-card p-6 hover:border-accent group">
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="bg-red-500 text-white text-[10px] font-black px-2 py-0.5 rounded-sm">FIRE</span>
+                    <span className="text-slate-700 font-bold group-hover:text-accent tracking-tighter transition-colors">01</span>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-accent transition-colors">Fire Type Strategy</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">Offensive powerhouse guide. Learn to break through Steel-types.</p>
+                </Link>
+                <Link href="/types/water" className="lab-card p-6 hover:border-accent group">
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="bg-blue-500 text-white text-[10px] font-black px-2 py-0.5 rounded-sm">WATER</span>
+                    <span className="text-slate-700 font-bold group-hover:text-accent tracking-tighter transition-colors">02</span>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-accent transition-colors">Water Type Utility</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">The ultimate defensive anchor. Balancing the Fire-Water-Grass core.</p>
+                </Link>
+                <Link href="/types/fairy" className="lab-card p-6 hover:border-accent group">
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="bg-pink-400 text-white text-[10px] font-black px-2 py-0.5 rounded-sm">FAIRY</span>
+                    <span className="text-slate-700 font-bold group-hover:text-accent tracking-tighter transition-colors">03</span>
+                  </div>
+                  <h3 className="text-xl font-bold mb-2 group-hover:text-accent transition-colors">Fairy Control</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">Shutting down Dragon-types. Essential Fairy-type coverage tips.</p>
+                </Link>
+              </div>
+            </section>
+
+            <section>
+              <div className="flex items-end justify-between mb-8 border-b border-slate-800 pb-4">
+                <div>
+                  <h2 className="text-3xl font-black tracking-tight mb-2">Tactical Building Guides</h2>
+                  <p className="text-slate-500 font-medium text-sm">Step-by-step check-lists to improve your roster.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <Link href="/guides/how-to-fix-shared-team-weaknesses" className="lab-card p-8 hover:border-accent group overflow-hidden relative">
+                  <div className="relative z-10 text-xs font-black text-accent mb-4 uppercase tracking-[0.2em]">Strategy Note</div>
+                  <h3 className="text-2xl font-black mb-4 relative z-10">How to Fix Shared Team Weaknesses</h3>
+                  <p className="text-slate-400 leading-relaxed relative z-10 max-w-md">Is your team getting swept by a single Ground-type? Here is how to swap members without breaking balance.</p>
+                  <div className="absolute top-0 right-0 p-8 transform translate-x-4 -translate-y-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <span className="text-8xl font-black italic">!</span>
+                  </div>
+                </Link>
+                <Link href="/guides/best-type-coverage-for-beginners" className="lab-card p-8 hover:border-accent group overflow-hidden relative">
+                  <div className="relative z-10 text-xs font-black text-accent mb-4 uppercase tracking-[0.2em]">Beginner Guide</div>
+                  <h3 className="text-2xl font-black mb-4 relative z-10">Perfect Coverage for Beginners</h3>
+                  <p className="text-slate-400 leading-relaxed relative z-10 max-w-md">Ensuring you can hit every type super-effectively. The simplest way to win more battles.</p>
+                  <div className="absolute top-0 right-0 p-8 transform translate-x-4 -translate-y-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                    <span className="text-8xl font-black italic">?</span>
+                  </div>
+                </Link>
+              </div>
+            </section>
           </div>
+
+          {/* SEO / FAQ Section */}
+          <section className="mt-40 pt-20 border-t border-slate-800">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="text-4xl font-black tracking-tighter mb-12 italic text-center uppercase">The Pokemonteamevaluator Theory</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-20">
+                <div className="lab-card p-8 bg-slate-900/30">
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">1. Why use Pokemonteamevaluator?</h3>
+                  <p className="text-slate-400 leading-relaxed text-sm">
+                    The competitive meta in Gen 9 is more complex than ever. With 18 distinct types and hundreds of viable moves, your team coordination is critical. Using **pokemonteamevaluator** allows you to visualize your defensive structural integrity and offensive ceiling before entering the arena. Our **pokemonteamevaluator** engine processes complex type charts to give you a definitive advantage in high-stakes battles.
+                  </p>
+                </div>
+                <div className="lab-card p-8 bg-slate-900/30">
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">2. The Pokemonteamevaluator Score</h3>
+                  <p className="text-slate-400 leading-relaxed text-sm">
+                    Every squad entered into the **pokemonteamevaluator** interface receives a real-time score. This **pokemonteamevaluator** metric isn't just a random number; it's a weighted calculation of coverage gaps, switch-in immunities, and vulnerability overlaps. A high **pokemonteamevaluator** score means your team has low shared weaknesses and high resilience.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-16 max-w-3xl mx-auto">
+                <div>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">What is the Pokemonteamevaluator exactly?</h3>
+                  <p className="text-slate-400 leading-relaxed">
+                    The **pokemonteamevaluator** is a free online tool designed for competitive trainers to analyze their team's strengths, weaknesses, and type coverage. Whether you are building a team for VGC battles, Smogon-tier matches, or your main story playthrough, our **pokemonteamevaluator** provides instant mathematical insights to ensure your strategy is bulletproof. Use **pokemonteamevaluator** to identify shared weaknesses, optimize offensive coverage, and calculate your team's defensive balance score.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-accent mb-4 italic uppercase">How to Optimize Your Roster with Pokemonteamevaluator</h3>
+                  <p className="text-slate-400 leading-relaxed mb-6">
+                    Success in high-level battles requires the kind of precision that only **pokemonteamevaluator** can provide. The **pokemonteamevaluator** helps you achieve this by highlighting critical flaws in your coverage. Using the **pokemonteamevaluator** dashboard is intentionally simple for pro-level results:
+                  </p>
+                  <ol className="list-none space-y-6 text-slate-400 font-medium">
+                    <li className="flex gap-4">
+                      <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">1</span>
+                      <div>
+                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Search and Add</strong>
+                        Find your core members using our **pokemonteamevaluator** search engine. Add them to your battle board instantly.
+                      </div>
+                    </li>
+                    <li className="flex gap-4">
+                      <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">2</span>
+                      <div>
+                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Evaluate Strategy</strong>
+                        Review the **pokemonteamevaluator** radar chart to see your team's overall balance across five key strategic dimensions.
+                      </div>
+                    </li>
+                    <li className="flex gap-4">
+                      <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-black flex-shrink-0">3</span>
+                      <div>
+                        <strong className="text-slate-200 block mb-1 uppercase tracking-tight italic">Iron Out Vulnerabilities</strong>
+                        The **pokemonteamevaluator** matrix results will show you exactly which types can sweep your entire team. Use this data to swap members until your **pokemonteamevaluator** score improves.
+                      </div>
+                    </li>
+                  </ol>
+                </div>
+                
+                <div className="pt-10 border-t border-slate-800/50">
+                  <p className="text-sm text-slate-500 leading-relaxed italic text-center">
+                    Trainers worldwide rely on **pokemonteamevaluator** data to refine their competitive strategies. Don't leave your victory to chance—verify your build with **pokemonteamevaluator** today. Our mission at **pokemonteamevaluator** is to provide the most accurate Gen 9 analysis available for free.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer className="bg-slate-950/80 border-t border-slate-800 py-12">
+          <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="text-center md:text-left">
+              <h2 className="text-xl font-black tracking-tighter mb-1 uppercase">POKEMON TEAM EVALUATOR</h2>
+              <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">Precision Analysis Utility // Gen 9</p>
+            </div>
+            <div className="flex gap-8 text-xs font-black text-slate-500 uppercase tracking-widest">
+              <Link href="/privacy" className="hover:text-accent transition-colors">Privacy</Link>
+              <Link href="/terms" className="hover:text-accent transition-colors">Terms</Link>
+              <Link href="/about" className="hover:text-accent transition-colors">Source</Link>
+            </div>
+          </div>
+        </footer>
+
+        {typeof document !== 'undefined' && createPortal(
+          <DragOverlay dropAnimation={{
+            sideEffects: defaultDropAnimationSideEffects({
+              styles: {
+                active: {
+                  opacity: '0.4',
+                },
+              },
+            }),
+          }}>
+            {activePokemon ? (
+              <div className={`lab-card p-4 flex flex-col items-center gap-2 border-accent bg-slate-800 shadow-2xl scale-105 pointer-events-none ${
+                activeId?.startsWith('search') ? 'w-48' : 'w-32'
+              }`}>
+                <PokemonImage 
+                  spriteUrl={activePokemon.spriteUrl} 
+                  emoji={activePokemon.sprite} 
+                  name={activePokemon.name} 
+                  size={activeId?.startsWith('search') ? 48 : 80}
+                />
+                <span className="font-bold text-sm text-slate-200 mt-2">{activePokemon.name}</span>
+              </div>
+            ) : null}
+          </DragOverlay>,
+          document.body
         )}
       </div>
-
-      {/* Search */}
-      <div className="mb-6 bg-gray-900/50 rounded-xl p-4 border border-gray-800">
-        <h2 className="text-lg font-bold mb-3">Add Pokémon</h2>
-        <PokemonSearch onAdd={addPokemon} team={team} />
-      </div>
-
-      {/* Ad placeholder */}
-      <div className="mb-6 p-4 border border-dashed border-gray-700 rounded text-gray-600 text-xs text-center">
-        Advertisement Space
-      </div>
-
-      {/* Analysis */}
-      {analysis && <AnalysisPanel analysis={analysis} team={team} />}
-
-      {/* SEO Content */}
-      <section className="mt-16 prose prose-invert prose-red max-w-none">
-        <h2 className="text-2xl font-bold text-red-500">What is the Pokémon Team Evaluator?</h2>
-        <p>
-          The Pokémon Team Evaluator is a free online tool that helps trainers analyze their Pokémon team&apos;s
-          strengths, weaknesses, and type coverage. Whether you&apos;re building a team for competitive VGC battles,
-          Smogon-tier matches, or just your playthrough, our evaluator gives you instant insights into how well
-          your team is constructed.
-        </p>
-        <p>
-          Our tool uses the complete Generation 9 type effectiveness chart, including all 18 types, immunities,
-          and dual-type interactions. Simply add up to 6 Pokémon and get a comprehensive analysis showing which
-          types your team can handle and where your vulnerabilities lie.
-        </p>
-
-        <h2 className="text-2xl font-bold text-red-500 mt-8">How to Use the Pokémon Team Evaluator</h2>
-        <ol>
-          <li><strong>Search for Pokémon</strong> — Use the search box to find Pokémon by name or type. Browse popular picks or search for specific team members.</li>
-          <li><strong>Build Your Team</strong> — Click on a Pokémon to add it to your team. You can add up to 6 Pokémon, just like in the games.</li>
-          <li><strong>View Analysis</strong> — Instantly see your team&apos;s score, shared weaknesses, uncovered types, and defensive matchup chart.</li>
-          <li><strong>Optimize</strong> — Remove Pokémon that create overlapping weaknesses and add ones that fill coverage gaps.</li>
-          <li><strong>Share Your Team</strong> — Copy your team composition and score to share with friends.</li>
-        </ol>
-
-        <h2 className="text-2xl font-bold text-red-500 mt-8">Understanding Your Team Score</h2>
-        <ul>
-          <li><strong>90-100:</strong> Excellent! Your team has great type coverage and minimal shared weaknesses.</li>
-          <li><strong>70-89:</strong> Good. Your team is solid but has some gaps that could be exploited.</li>
-          <li><strong>50-69:</strong> Average. Consider swapping some Pokémon to improve coverage.</li>
-          <li><strong>Below 50:</strong> Needs work. Your team has significant weaknesses that opponents can target.</li>
-        </ul>
-
-        <h2 className="text-2xl font-bold text-red-500 mt-8">Tips for Building a Strong Pokémon Team</h2>
-        <ul>
-          <li><strong>Cover All Types</strong> — Aim for at least one super-effective option against every type.</li>
-          <li><strong>Avoid Shared Weaknesses</strong> — If 3+ Pokémon share the same weakness, one move can sweep your team.</li>
-          <li><strong>Include Immunities</strong> — Ghost-types are immune to Normal/Fighting, Ground-types to Electric, etc. These provide safe switches.</li>
-          <li><strong>Balance Offense and Defense</strong> — Don&apos;t just focus on attacking power; defensive resistances matter too.</li>
-          <li><strong>Consider Dual Types</strong> — Dual-type Pokémon provide more coverage per team slot.</li>
-        </ul>
-
-        <h2 className="text-2xl font-bold text-red-500 mt-8">Frequently Asked Questions</h2>
-
-        <h3>Is the Pokémon Team Evaluator free?</h3>
-        <p>Yes! It&apos;s completely free with no registration, downloads, or hidden fees required.</p>
-
-        <h3>Which Pokémon games does this support?</h3>
-        <p>The type chart is based on Generation 9 (Scarlet/Violet), which is compatible with all modern Pokémon games. The same type effectiveness system has been used since Generation 6.</p>
-
-        <h3>Does this account for abilities and moves?</h3>
-        <p>Currently the evaluator focuses on type-based analysis. Abilities like Levitate or moves with special type interactions are not factored in yet, but are planned for future updates.</p>
-
-        <h3>Can I use this for competitive team building?</h3>
-        <p>Absolutely! The type coverage analysis is essential for VGC, Smogon, and any competitive format. Use it alongside damage calculators for the best results.</p>
-
-        <h3>How accurate is the type chart?</h3>
-        <p>Our type chart includes all 18 types with correct super-effective, not-very-effective, and immunity matchups based on the official Pokémon type system.</p>
-
-        <h3>Can I share my team with friends?</h3>
-        <p>Yes! Click &quot;Share Team&quot; to copy your team composition and score to your clipboard for easy sharing on Discord, Reddit, or social media.</p>
-      </section>
-    </div>
+    </DndContext>
   );
 }
